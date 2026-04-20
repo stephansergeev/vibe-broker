@@ -81,15 +81,35 @@ users = {u["id"]: u["name"] for u in data.get("_embedded", {}).get("users", [])}
 - >14д — критично
 - >30д — фактически заброшены
 
-## Шаг 5: Получи последнее сообщение по каждому лиду
+## Шаг 5: Получи последнее сообщение коммуникации по каждому лиду
 
+Реальные сообщения хранятся **на контакте**, а не на лиде. Алгоритм:
+
+**5.1** Получи контакт лида:
 ```
-GET /api/v4/leads/{id}/notes?limit=5&order[id]=desc
+GET /api/v4/leads/{id}?with=contacts  →  _embedded.contacts[0].id
 ```
 
-Из ответа — первая не-attachment заметка:
-- `params.text` или `params.subject` — текст (обрезать до 80 символов)
-- `created_by = 0` → "Система/клиент", иначе → имя брокера из users
+**5.2** Получи notes контакта:
+```
+GET /api/v4/contacts/{contact_id}/notes?limit=20&order[id]=desc
+```
+
+**5.3** Если на контакте нет коммуникации — fallback на notes лида:
+```
+GET /api/v4/leads/{id}/notes?limit=20&order[id]=desc
+```
+
+**Типы коммуникационных notes** (только их смотреть, остальные игнорировать):
+- `amomail_message` — email: `params.income` (true=от клиента/false=от брокера), `params.from.name`, текст = `params.content_summary` или `"[Email] " + params.subject` если summary пуст
+- `incoming_chat_message` — WA/чат от клиента: `params.text`
+- `outgoing_chat_message` — WA/чат от брокера: `params.text`, имя = lookup `created_by` в users
+- `call_in` / `call_out` — звонки: показывай `"Звонок {params.duration}с"`
+- `sms` — SMS: `params.text`
+
+**Формат "последнее сообщение":**
+- `← Клиент [Имя]: [текст]` — income=true или incoming_chat_message
+- `→ Брокер [Имя]: [текст]` — income=false или outgoing_chat_message
 
 ## Шаг 6: Определи следующее действие по стадии
 
